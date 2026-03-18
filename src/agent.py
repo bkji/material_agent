@@ -81,28 +81,30 @@ def format_output(state: AgentState) -> dict:
     lines.append(f"  검색 Fragment: {result['query_fragment']}")
     lines.append(f"  후보 분자 수: {result['total_candidates']}")
     lines.append(f"  사용 방법: {', '.join(methods_used)}")
+    if "graph_stats" in result and result["graph_stats"]:
+        gs = result["graph_stats"]
+        lines.append(f"  [Graph RAG] 노드: {gs['nodes']}개 (분자: {gs['molecule_nodes']}, fragment: {gs['fragment_nodes']}), 엣지: {gs['edges']}개")
     lines.append("=" * 80)
 
     if len(methods_used) == 1:
         # 단일 방법 모드
         method = methods_used[0]
-        lines.append(f"\n[{METHOD_DESCRIPTIONS[method]}] (소요시간: {all_elapsed[method]}초)")
+        lines.append(f"\n[{METHOD_DESCRIPTIONS[method]}] (소요시간: {all_elapsed.get(method, 0)}초)")
         lines.append("-" * 70)
-        lines.append(f"{'순위':<6}{'SMILES':<50}{'유사도':>10}")
-        lines.append("-" * 70)
-        for i, item in enumerate(all_results[method], 1):
-            smi = item["smiles"]
-            if len(smi) > 47:
-                smi = smi[:44] + "..."
-            lines.append(f"{i:<6}{smi:<50}{item['similarity_score']:>10.4f}")
-        lines.append("-" * 70)
-    else:
-        # 비교 모드: 각 방법별 결과 + 비교 테이블
-        for method in methods_used:
-            if method not in all_results:
-                continue
-            lines.append(f"\n[{METHOD_DESCRIPTIONS[method]}] (소요시간: {all_elapsed[method]}초)")
-            lines.append("-" * 70)
+        if method == "graph_rag":
+            lines.append(f"{'순위':<6}{'SMILES':<40}{'결합':>8}{'Jaccard':>9}{'Tanimoto':>9}{'공유Frag':>9}")
+            lines.append("-" * 81)
+            for i, item in enumerate(all_results[method], 1):
+                smi = item["smiles"]
+                if len(smi) > 37:
+                    smi = smi[:34] + "..."
+                lines.append(
+                    f"{i:<6}{smi:<40}{item['similarity_score']:>8.4f}"
+                    f"{item.get('jaccard_score', 0):>9.4f}"
+                    f"{item.get('tanimoto_score', 0):>9.4f}"
+                    f"{item.get('shared_fragments', 0):>9}"
+                )
+        else:
             lines.append(f"{'순위':<6}{'SMILES':<50}{'유사도':>10}")
             lines.append("-" * 70)
             for i, item in enumerate(all_results[method], 1):
@@ -110,6 +112,35 @@ def format_output(state: AgentState) -> dict:
                 if len(smi) > 47:
                     smi = smi[:44] + "..."
                 lines.append(f"{i:<6}{smi:<50}{item['similarity_score']:>10.4f}")
+        lines.append("-" * 70)
+    else:
+        # 비교 모드: 각 방법별 결과 + 비교 테이블
+        for method in methods_used:
+            if method not in all_results:
+                continue
+            lines.append(f"\n[{METHOD_DESCRIPTIONS[method]}] (소요시간: {all_elapsed.get(method, 0)}초)")
+            lines.append("-" * 70)
+            if method == "graph_rag":
+                lines.append(f"{'순위':<6}{'SMILES':<40}{'결합':>8}{'Jaccard':>9}{'Tanimoto':>9}{'공유Frag':>9}")
+                lines.append("-" * 81)
+                for i, item in enumerate(all_results[method], 1):
+                    smi = item["smiles"]
+                    if len(smi) > 37:
+                        smi = smi[:34] + "..."
+                    lines.append(
+                        f"{i:<6}{smi:<40}{item['similarity_score']:>8.4f}"
+                        f"{item.get('jaccard_score', 0):>9.4f}"
+                        f"{item.get('tanimoto_score', 0):>9.4f}"
+                        f"{item.get('shared_fragments', 0):>9}"
+                    )
+            else:
+                lines.append(f"{'순위':<6}{'SMILES':<50}{'유사도':>10}")
+                lines.append("-" * 70)
+                for i, item in enumerate(all_results[method], 1):
+                    smi = item["smiles"]
+                    if len(smi) > 47:
+                        smi = smi[:44] + "..."
+                    lines.append(f"{i:<6}{smi:<50}{item['similarity_score']:>10.4f}")
             lines.append("-" * 70)
 
         # 방법 간 비교 요약 테이블
@@ -240,12 +271,13 @@ if __name__ == "__main__":
         choices=METHODS,
         help=(
             "사용할 유사도 방법 (복수 선택 가능, 기본: 전체)\n"
-            "  morgan   : Morgan (ECFP4) Fingerprint\n"
-            "  maccs    : MACCS Keys (166bit)\n"
-            "  rdkit    : RDKit Fingerprint\n"
-            "  atompair : AtomPair Fingerprint\n"
-            "  torsion  : Topological Torsion Fingerprint\n"
-            "  mcs      : Maximum Common Substructure"
+            "  morgan    : Morgan (ECFP4) Fingerprint\n"
+            "  maccs     : MACCS Keys (166bit)\n"
+            "  rdkit     : RDKit Fingerprint\n"
+            "  atompair  : AtomPair Fingerprint\n"
+            "  torsion   : Topological Torsion Fingerprint\n"
+            "  mcs       : Maximum Common Substructure\n"
+            "  graph_rag : Graph RAG (Knowledge Graph + BRICS)"
         ),
     )
     parser.add_argument(

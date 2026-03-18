@@ -10,6 +10,7 @@ SMILES fragment를 입력받아 QM8 데이터셋에서 해당 fragment를 포함
 4. AtomPair Fingerprint + Tanimoto
 5. Topological Torsion Fingerprint + Tanimoto
 6. MCS (Maximum Common Substructure) 기반 유사도
+7. Graph RAG (Knowledge Graph + BRICS Fragment + Jaccard/Tanimoto 결합)
 """
 
 import os
@@ -24,7 +25,7 @@ RDLogger.logger().setLevel(RDLogger.ERROR)
 DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "0_qm8_260318", "qm8.csv")
 
 # 지원하는 유사도 방법 목록
-METHODS = ["morgan", "maccs", "rdkit", "atompair", "torsion", "mcs"]
+METHODS = ["morgan", "maccs", "rdkit", "atompair", "torsion", "mcs", "graph_rag"]
 
 METHOD_DESCRIPTIONS = {
     "morgan": "Morgan (ECFP4) Fingerprint + Tanimoto",
@@ -33,6 +34,7 @@ METHOD_DESCRIPTIONS = {
     "atompair": "AtomPair Fingerprint + Tanimoto",
     "torsion": "Topological Torsion Fingerprint + Tanimoto",
     "mcs": "Maximum Common Substructure (MCS) 기반 유사도",
+    "graph_rag": "Graph RAG (Knowledge Graph + BRICS + Jaccard/Tanimoto)",
 }
 
 
@@ -108,6 +110,7 @@ def search_fragment(
     substruct_filter: bool = True,
     methods: list[str] | None = None,
     data_path: str = DATA_PATH,
+    knowledge_graph=None,
 ) -> dict:
     """Fragment 유사도 검색 메인 함수 (다중 방법 지원).
 
@@ -118,6 +121,7 @@ def search_fragment(
         substruct_filter: 부분구조 필터링 사용 여부
         methods: 사용할 유사도 방법 리스트 (None이면 전체)
         data_path: QM8 데이터 경로
+        knowledge_graph: Graph RAG용 사전 구축된 Knowledge Graph (None이면 자동 구축)
 
     Returns:
         {
@@ -126,6 +130,7 @@ def search_fragment(
             "total_candidates": int,
             "results": {method: [{smiles, similarity_score}, ...]},
             "elapsed": {method: float (초)},
+            "graph_stats": dict (graph_rag 사용 시),
         }
     """
     if molecules is None:
@@ -158,9 +163,10 @@ def search_fragment(
 
     all_results = {}
     all_elapsed = {}
+    graph_stats = None
 
     # Fingerprint 기반 방법들
-    fp_methods = [m for m in methods if m != "mcs"]
+    fp_methods = [m for m in methods if m not in ("mcs", "graph_rag")]
     for method in fp_methods:
         t0 = time.perf_counter()
         fp_key = f"fp_{method}"
@@ -177,7 +183,7 @@ def search_fragment(
         all_results[method] = results[:top_k]
         all_elapsed[method] = round(time.perf_counter() - t0, 4)
 
-    # MCS 방법 (후보가 너무 많으면 상위 substructure match만 대상)
+    # MCS 방법
     if "mcs" in methods:
         t0 = time.perf_counter()
         mcs_candidates = candidates[:200] if len(candidates) > 200 else candidates
@@ -192,10 +198,40 @@ def search_fragment(
         all_results["mcs"] = results[:top_k]
         all_elapsed["mcs"] = round(time.perf_counter() - t0, 4)
 
-    return {
+    # Graph RAG 방법
+    if "graph_rag" in methods:
+        from graph_rag import build_knowledge_graph, graph_rag_search
+
+        t0 = time.perf_counter()
+        if knowledge_graph is None:
+            knowledge_graph = build_knowledge_graph(data_path)
+        graph_build_time = round(time.perf_counter() - t0, 4)
+
+        rag_result = graph_rag_search(knowledge_graph, fragment_smiles, top_k=top_k)
+        graph_stats = rag_result.get("graph_stats")
+
+        results = []
+        for item in rag_result.get("results", []):
+            results.append({
+                "smiles": item["smiles"],
+                "similarity_score": item["similarity_score"],
+                "jaccard_score": item.get("jaccard_score", 0),
+                "tanimoto_score": item.get("tanimoto_score", 0),
+                "shared_fragments": item.get("shared_fragments", 0),
+                "total_fragments": item.get("total_fragments", 0),
+            })
+        all_results["graph_rag"] = results
+        total_elapsed = rag_result.get("elapsed", 0) + graph_build_time
+        all_elapsed["graph_rag"] = round(total_elapsed, 4)
+
+    result = {
         "query_fragment": fragment_smiles,
         "methods_used": methods,
         "total_candidates": total_candidates,
         "results": all_results,
         "elapsed": all_elapsed,
     }
+    if graph_stats:
+        result["graph_stats"] = graph_stats
+
+    return result

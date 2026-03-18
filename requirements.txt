@@ -1,6 +1,7 @@
 rdkit
 pandas
 numpy
+networkx
 langgraph
 langchain
 langchain-core
