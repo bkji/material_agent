@@ -104,6 +104,11 @@ D:/WPy64-312101_material/python/python.exe -m pip install <패키지명>
 - 이 소스는 https://github.com/bkji/material_agent.git 에서 관리한다.
 - 초기 작업으로 현재 프로젝트 폴더(C:\Users\cowork.11\claude_cowork_material\test)의 내용으로 변경 (기존 src 삭제하되, revert하는것은 아니고 head를 증가시켜 과거이력 남김)
 
+### git push 네트워크 문제 대응
+- 이 환경에서 `git push`가 `curl 52 Empty reply from server` 또는 `unexpected disconnect while reading sideband packet` 에러로 실패하는 경우가 빈번하다.
+- **실패 시 `git fetch origin`으로 리모트 상태를 확인한 뒤 동일한 `git push origin main` 명령을 재시도**하면 성공한다.
+- 보통 2~3회 재시도 내에 성공하므로, push 실패 시 바로 포기하지 말고 재시도할 것.
+
 ---
 ## Code생성 작업 고려사항
 - python package 설치는 자동으로 진행할 것. 버전 에러 발생시 적절한 패키지 버전 재설치 포함
