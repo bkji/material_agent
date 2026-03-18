@@ -82,3 +82,17 @@ const pkg = require(path.join(process.env.HOME, 'mnt', wsDir, 'node_modules', '<
 
 - 워크스페이스의 `node_modules/`는 유저 폴더에 남으므로, 작업 완료 후 불필요하면 정리 안내
 - 프리설치 패키지가 있으면 반드시 프리설치 우선 사용
+
+## Python 환경
+
+이 프로젝트 전용 WinPython이 `D:\WPy64-312101_material`에 설치되어 있다.
+
+```bash
+# Python 실행
+D:/WPy64-312101_material/python/python.exe script.py
+
+# 패키지 설치
+D:/WPy64-312101_material/python/python.exe -m pip install <패키지명>
+```
+
+- 현재 base 패키지만 설치됨 (pip, setuptools, wheel 등). 과학 계산 라이브러리(numpy, pandas, rdkit 등)는 필요 시 pip으로 설치할 것.
